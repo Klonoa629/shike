@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Time rail and three independent lesson cards, inside the adaptive safe zone. -->
+    <path android:fillColor="#76BAA5" android:pathData="M29,42C29,40.9 29.9,40 31,40C32.1,40 33,40.9 33,42V75C33,76.1 32.1,77 31,77C29.9,77 29,76.1 29,75Z" />
+    <path android:fillColor="#F0CB83" android:pathData="M35,33A4,4 0,1 1,27 33A4,4 0,1 1,35 33Z" />
+    <path android:fillColor="#F8F5E9" android:pathData="M46,29H74C76.8,29 79,31.2 79,34V37C79,39.8 76.8,42 74,42H46C43.2,42 41,39.8 41,37V34C41,31.2 43.2,29 46,29Z" />
+    <path android:fillColor="#ACDDC9" android:pathData="M46,47H63C65.8,47 68,49.2 68,52V55C68,57.8 65.8,60 63,60H46C43.2,60 41,57.8 41,55V52C41,49.2 43.2,47 46,47Z" />
+    <path android:fillColor="#F8F5E9" android:pathData="M46,65H74C76.8,65 79,67.2 79,70V73C79,75.8 76.8,78 74,78H46C43.2,78 41,75.8 41,73V70C41,67.2 43.2,65 46,65Z" />
+</vector>
