@@ -6,6 +6,8 @@
 <p align="center">按真实时间安排课程，让每一次调课都独立。</p>
 <p align="center">Android 8.0+ · Kotlin · Jetpack Compose · MIT</p>
 
+[![Android CI](https://github.com/Klonoa629/shike/actions/workflows/android.yml/badge.svg)](https://github.com/Klonoa629/shike/actions/workflows/android.yml)
+
 时课是一款适配安徽理工大学教务系统的 Android 课程表，支持教务导入和手动安排实验课、课程设计。采用实际时间轴，课程不必拘泥于固定节次。
 
 > 个人开源项目，非学校官方应用。首次使用需要有效的安徽理工大学教务账号。
@@ -40,6 +42,8 @@
 需先配置 `JAVA_HOME` 和 `ANDROID_HOME`；Linux / macOS 可用 `bash ./gradlew` 替代，尚未做完整平台验证。调试 APK 输出至 `app/build/outputs/apk/debug/`。
 
 技术栈：Kotlin · Jetpack Compose · Room · WorkManager。1.0.1 已通过 Debug / Release 各 55 项单元测试及 26 项真机数据库测试，主要验证机型为 Redmi K90。
+
+提交和 PR 自动运行构建、单元测试与 Lint；在 [Actions](https://github.com/Klonoa629/shike/actions) 下载调试 APK 和检查报告。正式版仍从 Releases 下载。
 
 [构建与签名](docs/BUILDING.md) · [更新记录](CHANGELOG.md)
 

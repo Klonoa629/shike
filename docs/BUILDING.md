@@ -51,3 +51,12 @@ pwsh -NoProfile -File ./scripts/build-release.ps1 -InitializeSigning -Online `
 | Debug | 时课（测试版） | `cn.aust.mytimetable.debug` |
 
 两版可并存，数据独立。从测试版迁移时，先导出最新备份，再在正式版使用同一账号登录并恢复。核对课程和备注后再决定是否移除旧版。不同签名无法直接覆盖升级，请勿通过卸载丢弃尚未备份的数据。
+
+## GitHub Actions
+
+`Android CI` 在推送 main、向 main 提交 PR 或手动触发时运行，使用 Ubuntu 24.04、Temurin 25 和项目固定的 Android SDK / Gradle 版本。
+
+- 构建调试 APK 和设备测试 APK，运行 Debug / Release 单元测试及 Lint。
+- 调试 APK 保留 7 天，测试与 Lint 报告保留 14 天；失败时也尝试上传报告。
+- 不运行设备测试或连接学校账号；设备测试仍按上面的 ADB 步骤执行。
+- 不使用正式签名密钥，不自动发布 Release。云端调试 APK 与正式版独立，不能覆盖正式版。
