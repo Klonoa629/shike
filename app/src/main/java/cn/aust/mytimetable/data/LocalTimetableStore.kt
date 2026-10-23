@@ -160,6 +160,49 @@ class LocalTimetableStore(private val dao: TimetableDao) {
         return result!!
     }
 
+    fun previewSync(account: String, download: SemesterDownload): SyncReview? {
+        download.validate()
+        if (dao.snapshotByKey(semesterKey(download.business.id, download.semester.id)) == null) return null
+        val baseline = backup(account, 1)
+        val row = baseline.snapshots.singleOrNull { it.id == semesterKey(download.business.id, download.semester.id) }
+            ?: return null
+        val changes = baseline.changes.filter { it.scope == scope(row) }
+        val newKeys = download.courses.map(::key).toSet()
+        val missing = changes.filter { it.originalKey != null && it.originalKey !in newKeys }
+        if (missing.isEmpty()) return null
+        val oldKeys = load(row.id)!!.download.courses.map(::key).toSet()
+        val groups = missing.groupBy { unpack(it).lessonId }.map { (lesson, edits) ->
+            SyncConflict(lesson, edits.map { SyncLocal(it.id, unpack(it), it.deleted) },
+                download.courses.filter { it.lessonId == lesson && key(it) !in oldKeys })
+        }
+        return SyncReview(download, baseline, groups)
+    }
+
+    fun resolveSync(account: String, review: SyncReview, useSchool: Set<String>, now: Long): StoredSemester {
+        var result: StoredSemester? = null
+        dao.atomic {
+            if (backup(account, 1) != review.baseline)
+                throw SchoolFailure("课表已发生变化，请取消后重新同步。原有安排已保留。")
+            require(useSchool.all { id -> review.conflicts.any { it.id == id } })
+            val row = review.baseline.snapshots.single { it.id == semesterKey(review.download.business.id, review.download.semester.id) }
+            review.conflicts.forEach { conflict ->
+                conflict.local.forEach { local ->
+                    val change = review.baseline.changes.single { it.id == local.id }
+                    if (conflict.id in useSchool || local.deleted) dao.removeChange(local.id)
+                    else dao.putChanges(listOf(change.copy(originalKey = null)))
+                }
+                if (conflict.id !in useSchool) {
+                    // The user explicitly chooses the entire displayed group; never guess a one-to-one match.
+                    dao.putChanges(conflict.school.map { course ->
+                        LocalChangeRow(java.util.UUID.randomUUID().toString(), scope(row), key(course), true, payload(course))
+                    })
+                }
+            }
+            result = save(account, review.download, now)
+        }
+        return result!!
+    }
+
     private fun scope(row: SnapshotRow) = encode(listOf(row.ownerKey, row.businessId, row.semesterId))
     private fun key(c: SchoolCourse) = encode(listOf(c.lessonId, c.date.toString(), c.start.toString(), c.end.toString()))
     private fun merge(data: SemesterDownload, changes: List<LocalChangeRow>): List<SchoolCourse> {
@@ -191,3 +234,8 @@ class LocalTimetableStore(private val dao: TimetableDao) {
     private fun ownerKey(account: String) = MessageDigest.getInstance("SHA-256")
         .digest(account.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 255) }
 }
+
+// Pending downloads are memory-only. Cancelling a review never writes to the database.
+data class SyncLocal(val id: String, val course: SchoolCourse, val deleted: Boolean)
+data class SyncConflict(val id: String, val local: List<SyncLocal>, val school: List<SchoolCourse>)
+data class SyncReview(val download: SemesterDownload, val baseline: TimetableBackup, val conflicts: List<SyncConflict>)

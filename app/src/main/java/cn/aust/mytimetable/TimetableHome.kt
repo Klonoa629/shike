@@ -134,7 +134,7 @@ private fun SignedInTimetable(model: SchoolViewModel, mode: String, changeMode: 
             syncResult = (if (error == null) "同步成功" else "同步失败") to error
         }
     }
-    LaunchedEffect(state.busy, state.signedIn, state.backupPreview) {
+    LaunchedEffect(state.busy, state.signedIn, state.backupPreview, state.syncReview) {
         if (!state.busy && state.signedIn) model.checkAutomaticSync()
     }
     val goToWeek: (Int) -> Unit = { week ->
@@ -261,6 +261,14 @@ private fun SignedInTimetable(model: SchoolViewModel, mode: String, changeMode: 
             }, confirmButton = { TextButton(onClick = { chooseSemester = false }) { Text("关闭") } },
                 dismissButton = { TextButton(onClick = model::loadSemesters, enabled = !state.busy) { Text("获取学校学期") } })
         }
+        androidx.compose.animation.AnimatedVisibility(visible = state.syncReview != null,
+            enter = androidx.compose.animation.slideInHorizontally(tween(300)) { it },
+            exit = androidx.compose.animation.slideOutHorizontally(tween(300)) { it }) {
+            val displayedReview = remember { state.syncReview }
+            displayedReview?.let { review ->
+                SyncReviewPage(review, state.busy, model::cancelSyncReview, model::confirmSyncReview)
+            }
+        }
         state.notice?.let { message ->
             AlertDialog(onDismissRequest = model::dismissNotice, containerColor = MaterialTheme.colorScheme.background,
                 title = { Text("提示") }, text = { Text(message) },
@@ -274,8 +282,7 @@ private fun SignedInTimetable(model: SchoolViewModel, mode: String, changeMode: 
                         Text("备份时间：${java.time.Instant.ofEpochMilli(backup.createdAt).atZone(ZoneId.of("Asia/Shanghai")).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))}")
                         Text("${backup.semesters.size} 个学期 · ${backup.courses} 次上课")
                         Text(backup.semesters.joinToString("\n"))
-                        Text("将替换本机全部学期的课表、手动安排和备注，备份之后的修改会被覆盖。建议先导出当前课表备份。")
-                        Text("当前登录账号与外观设置保持不变。")
+                        Text("将覆盖全部学期的课表和备注，备份后的修改将丢失。")
                     }
                 }, confirmButton = { TextButton(onClick = model::restoreBackup, enabled = !state.busy) { Text("确认恢复") } },
                 dismissButton = { TextButton(onClick = model::cancelRestore, enabled = !state.busy) { Text("取消") } })

@@ -21,29 +21,28 @@ internal fun CourseEditor(semester: Semester, original: SchoolCourse?, busy: Boo
     onSave: (List<SchoolCourse>, Boolean, (String?) -> Unit) -> Unit) {
     var name by remember { mutableStateOf(original?.name ?: "") }
     var teacher by remember { mutableStateOf(original?.teachers?.joinToString("、") ?: "") }
-    var location by remember { mutableStateOf(original?.rooms?.joinToString("、") ?: "") }
     var notes by remember { mutableStateOf(original?.notes ?: "") }
     var slots by remember { mutableStateOf(listOf(ScheduleSlot(
         original?.let { semester.weekAt(it.date)?.let(::setOf) } ?: emptySet(), original?.date?.dayOfWeek ?: DayOfWeek.MONDAY,
-        original?.start ?: LocalTime.of(8, 0), original?.end ?: LocalTime.of(10, 0)))) }
+        original?.start ?: LocalTime.of(8, 0), original?.end ?: LocalTime.of(10, 0), original?.rooms?.joinToString("、") ?: ""))) }
     var weekPicker by remember { mutableStateOf<Int?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmation by remember { mutableStateOf<String?>(null) }
     var discard by remember { mutableStateOf(false) }
     var timePicker by remember { mutableStateOf<Pair<Int, Boolean>?>(null) }
     val dirty = name != (original?.name ?: "") || teacher != (original?.teachers?.joinToString("、") ?: "") ||
-        location != (original?.rooms?.joinToString("、") ?: "") || notes != (original?.notes ?: "") ||
+        notes != (original?.notes ?: "") ||
         slots != listOf(ScheduleSlot(original?.let { semester.weekAt(it.date)?.let(::setOf) } ?: emptySet(),
-            original?.date?.dayOfWeek ?: DayOfWeek.MONDAY, original?.start ?: LocalTime.of(8, 0), original?.end ?: LocalTime.of(10, 0)))
+            original?.date?.dayOfWeek ?: DayOfWeek.MONDAY, original?.start ?: LocalTime.of(8, 0), original?.end ?: LocalTime.of(10, 0), original?.rooms?.joinToString("、") ?: ""))
     val close = { if (!busy) { if (dirty) discard = true else onDismiss() } }
     fun submit(delete: Boolean = false) {
         error = null
         try {
-            val expanded = if (delete) emptyList() else ManualSchedule.expand(semester, name, teacher, location, notes, slots)
+            val expanded = if (delete) emptyList() else ManualSchedule.expand(semester, name, teacher, notes, slots)
             val courses = if (original != null && expanded.isNotEmpty()) listOf(expanded.single().copy(
                 lessonId = original.lessonId, localId = original.localId, manual = original.manual,
                 teachers = if (teacher == original.teachers.joinToString("、")) original.teachers else expanded.single().teachers,
-                rooms = if (location == original.rooms.joinToString("、")) original.rooms else expanded.single().rooms)) else expanded
+                rooms = if (slots.single().location == original.rooms.joinToString("、")) original.rooms else expanded.single().rooms)) else expanded
             onSave(courses, delete) { failure -> if (failure == null) onDismiss() else error = failure }
         } catch (e: SchoolFailure) { error = e.message }
     }
@@ -63,7 +62,6 @@ internal fun CourseEditor(semester: Semester, original: SchoolCourse?, busy: Boo
                     Text("课程信息", style = MaterialTheme.typography.titleMedium)
                     OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), enabled = !busy, label = { Text("课程名称") }, singleLine = true)
                     OutlinedTextField(teacher, { teacher = it }, Modifier.fillMaxWidth(), enabled = !busy, label = { Text("教师") }, singleLine = true)
-                    OutlinedTextField(location, { location = it }, Modifier.fillMaxWidth(), enabled = !busy, label = { Text("地点（选填）") }, singleLine = true)
                     OutlinedTextField(notes, { notes = it }, Modifier.fillMaxWidth(), enabled = !busy, label = { Text("备注（选填）") }, minLines = 2, maxLines = 4)
                     Spacer(Modifier.height(4.dp))
                     Text("上课安排", style = MaterialTheme.typography.titleMedium)
@@ -86,6 +84,9 @@ internal fun CourseEditor(semester: Semester, original: SchoolCourse?, busy: Boo
                                         }
                                     }
                                 }
+                                OutlinedTextField(slot.location, { value ->
+                                    slots = slots.toMutableList().also { it[index] = slot.copy(location = value) }
+                                }, Modifier.fillMaxWidth(), enabled = !busy, label = { Text("地点（选填）") }, singleLine = true)
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     listOf(true, false).forEach { start ->
                                         val time = if (start) slot.start else slot.end
@@ -97,8 +98,7 @@ internal fun CourseEditor(semester: Semester, original: SchoolCourse?, busy: Boo
                             }
                         }
                     }
-                    if (original == null) OutlinedButton(onClick = { slots = slots + slots.last().copy(weeks = emptySet()) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("＋ 添加另一组时间") }
-                    Text("08:00—22:00 · 每次至少 1 小时 · 时间不可重叠", style = MaterialTheme.typography.bodySmall)
+                    if (original == null) OutlinedButton(onClick = { slots = slots + slots.last().copy(weeks = emptySet(), location = "") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("＋ 添加安排") }
                     if (original != null) FilledTonalButton(onClick = { confirmation = "delete" }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("删除这次上课", color = MaterialTheme.colorScheme.error) }
                 }
             }
@@ -133,7 +133,7 @@ internal fun CourseEditor(semester: Semester, original: SchoolCourse?, busy: Boo
         }
         confirmation?.let {
             AlertDialog(onDismissRequest = { confirmation = null }, title = { Text("删除这次上课？") },
-                text = { Text("只删除这一次，其他周的课程保留。") },
+                text = { Text("仅删除这次上课。") },
                 confirmButton = { FilledTonalButton(onClick = { confirmation = null; submit(delete = true) }) { Text("确认") } },
                 dismissButton = { FilledTonalButton(onClick = { confirmation = null }) { Text("取消") } })
         }

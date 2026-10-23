@@ -13,13 +13,15 @@
 ## 特性
 
 - **时间轴周视图**：左右滑动切周，点击卡片查看详情，长按编辑当次课程。
-- **灵活排课**：多周批量添加、多组时间安排；调整一次课程不影响其他周。
-- **教务同步**：整学期导入、手动与到期自动同步，失败保留原有数据。
+- **灵活排课**：多周批量添加、多组时间与教室安排；调整一次课程不影响其他周。
+- **教务同步**：整学期导入、手动与到期自动同步，调课冲突确认后合并，失败保留原有数据。
 - **离线与历史学期**：已保存课表可离线查看，旧学期独立保留。
 - **本地备份**：导出课程与个人修改，恢复前预览并确认。
 - **简洁外观**：白天、黑夜、跟随系统三种模式。
 
 ## 开始使用
+
+[下载正式版](https://github.com/Klonoa629/shike/releases/latest)
 
 登录后同步当前学期；点击“＋”补充线下课程，在设置中切换学期、外观或备份课表。
 
@@ -37,7 +39,7 @@
 
 需先配置 `JAVA_HOME` 和 `ANDROID_HOME`；Linux / macOS 可用 `bash ./gradlew` 替代，尚未做完整平台验证。调试 APK 输出至 `app/build/outputs/apk/debug/`。
 
-技术栈：Kotlin · Jetpack Compose · Room · WorkManager。1.0.0 已通过 Debug / Release 各 54 项单元测试及 20 项真机数据库测试，主要验证机型为 Redmi K90。
+技术栈：Kotlin · Jetpack Compose · Room · WorkManager。1.0.1 已通过 Debug / Release 各 55 项单元测试及 26 项真机数据库测试，主要验证机型为 Redmi K90。
 
 [构建与签名](docs/BUILDING.md) · [更新记录](CHANGELOG.md)
 

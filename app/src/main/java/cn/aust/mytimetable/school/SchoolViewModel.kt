@@ -19,6 +19,7 @@ import androidx.room.Room
 import cn.aust.mytimetable.data.BackupCodec
 import cn.aust.mytimetable.data.BackupSummary
 import cn.aust.mytimetable.data.TimetableBackup
+import cn.aust.mytimetable.data.SyncReview
 
 data class SchoolUiState(
     val initialized: Boolean = false,
@@ -37,6 +38,7 @@ data class SchoolUiState(
     val semesters: List<SemesterChoice> = emptyList(),
     val notice: String? = null,
     val backupPreview: BackupSummary? = null,
+    val syncReview: SyncReview? = null,
 ) {
     val viewingCurrent: Boolean get() = stored == null || currentKey == semesterKey(stored.download.business.id, stored.download.semester.id)
 }
@@ -153,6 +155,11 @@ class SchoolViewModel(application: Application) : AndroidViewModel(application) 
             checkActive = { epoch.check(ticket) }, progress = { week, total ->
                 publish(ticket) { it.copy(status = "正在同步第 $week / $total 周…") }
             })
+        val review = store.previewSync(login.account, downloaded)
+        if (review != null) {
+            publish(ticket) { it.copy(syncReview = review, status = "请核对调课安排") }
+            return
+        }
         val stored = epoch.commit(ticket) {
             store.save(login.account, downloaded, System.currentTimeMillis())
         }
@@ -210,7 +217,7 @@ class SchoolViewModel(application: Application) : AndroidViewModel(application) 
         pendingBackup = null
         WeeklySync.cancel(getApplication())
         val ticket = epoch.invalidate()
-        state = state.copy(busy = true, signedIn = false, status = "正在退出登录…", error = null, syncNotice = null, businesses = emptyList(), backupPreview = null)
+        state = state.copy(busy = true, signedIn = false, status = "正在退出登录…", error = null, syncNotice = null, businesses = emptyList(), backupPreview = null, syncReview = null)
         worker.execute {
             saved = null
             try {
@@ -237,7 +244,9 @@ class SchoolViewModel(application: Application) : AndroidViewModel(application) 
                 failure = "本次操作未完成，请重试。原有课表已保留。"
                 publish(ticket) { it.copy(error = "本次操作未完成，请重试。原有课表已保留。", status = "本次操作失败。") }
             } finally {
-                if (epoch.current() == ticket) WeeklySync.result(getApplication(), failure)
+                if (epoch.current() == ticket) main.post {
+                    if (epoch.current() == ticket && state.syncReview == null) WeeklySync.result(getApplication(), failure)
+                }
                 publish(ticket) { it.copy(busy = false) }
             }
         }
@@ -250,7 +259,7 @@ class SchoolViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun checkAutomaticSync() {
-        if (state.backupPreview != null) return
+        if (state.backupPreview != null || state.syncReview != null) return
         refreshBackgroundResult()
         if (!state.busy && state.signedIn && !state.storageProblem && !state.vaultProblem && SchoolWorkQueue.backgroundTasks.get() == 0) {
             val successfulAt = state.currentSuccessfulAt ?: return
@@ -267,7 +276,7 @@ class SchoolViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun refreshBackgroundResult() {
         // Finish an explicit switch/edit first, then refresh its selected semester.
-        if (state.busy) return
+        if (state.busy || state.syncReview != null) return
         val result = schedulePrefs.getLong("result", 0)
         if (result <= observedResult) return
         observedResult = result
@@ -364,6 +373,33 @@ class SchoolViewModel(application: Application) : AndroidViewModel(application) 
                 }
             } catch (e: Exception) {
                 publish(ticket) { it.copy(notice = if (e is SchoolFailure) e.message else "暂时无法打开这个学期，请稍后重试。") }
+            } finally { publish(ticket) { it.copy(busy = false) } }
+        }
+    }
+
+    fun cancelSyncReview() {
+        if (!state.busy) state = state.copy(syncReview = null, status = "已保留原有课表")
+    }
+
+    fun confirmSyncReview(useSchool: Set<String>) {
+        if (state.busy || !state.signedIn) return
+        val review = state.syncReview ?: return
+        val ticket = epoch.current()
+        state = state.copy(busy = true, notice = null)
+        worker.execute {
+            try {
+                val account = vault.load()?.account ?: throw SchoolFailure("请先登录。")
+                val stored = epoch.commit(ticket) { store.resolveSync(account, review, useSchool, System.currentTimeMillis()) }
+                val choices = store.semesters()
+                WeeklySync.schedule(getApplication(), stored.successfulAt, ExistingWorkPolicy.REPLACE)
+                publish(ticket) { ui ->
+                    val week = if (ui.preview?.semester == stored.download.semester) ui.preview.week else initialWeek(stored.download.semester)
+                    ui.copy(syncReview = null, stored = stored, preview = stored.week(week),
+                        semesters = mergeChoices(ui.semesters, choices), currentKey = semesterKey(stored.download.business.id, stored.download.semester.id),
+                        currentSuccessfulAt = stored.successfulAt, notice = "同步成功", status = "同步成功")
+                }
+            } catch (e: Exception) {
+                publish(ticket) { it.copy(notice = if (e is SchoolFailure) e.message else "保存失败，原有课表已保留，请重试。") }
             } finally { publish(ticket) { it.copy(busy = false) } }
         }
     }

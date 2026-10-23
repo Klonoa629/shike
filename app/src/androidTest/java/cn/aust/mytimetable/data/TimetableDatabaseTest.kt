@@ -160,7 +160,7 @@ class TimetableDatabaseTest {
         }
     }
 
-    private fun manual() = ManualSchedule.expand(semester, "实验", "老师", "", "带电脑", listOf(
+    private fun manual() = ManualSchedule.expand(semester, "实验", "老师", "带电脑", listOf(
         ScheduleSlot(setOf(7, 8), DayOfWeek.SATURDAY, LocalTime.of(18, 30), LocalTime.of(21, 30))))
 
     @Test fun batchEditMoveAndDeleteOnlyAffectOneOccurrence() {
@@ -212,6 +212,76 @@ class TimetableDatabaseTest {
         val edited = store.load()
         assertThrows(SchoolFailure::class.java) { store.save("test-account", download(listOf(course.copy(date = course.date.plusDays(1)))), 3000) }
         assertEquals(edited, store.load())
+    }
+
+    @Test fun reviewIsReadOnlyAndKeepingLocalPreservesRoomsNotesAndFutureSync() {
+        store.save("test-account", download(), 1000)
+        store.edit(semester, manual())
+        store.edit(semester, listOf(course.copy(notes = "保留备注", rooms = listOf("实验室"))), course)
+        val before = store.backup("test-account", 1)
+        val changed = download(listOf(course.copy(date = course.date.plusDays(1))))
+        val review = store.previewSync("test-account", changed)!!
+        assertEquals(before, store.backup("test-account", 1))
+        assertEquals(1, review.conflicts.size)
+        assertEquals(changed.courses, review.conflicts.single().school)
+        val saved = store.resolveSync("test-account", review, emptySet(), 2000)
+        assertEquals(3, saved.effectiveCourses.size)
+        assertTrue(saved.effectiveCourses.any { it.notes == "保留备注" && it.rooms == listOf("实验室") })
+        assertFalse(saved.effectiveCourses.any { it.date == course.date.plusDays(1) })
+        assertEquals(saved.effectiveCourses, store.save("test-account", changed, 3000).effectiveCourses)
+        val backup = store.backup("test-account", 4000)
+        store.restore("test-account", backup)
+        assertEquals(saved.effectiveCourses, store.load()!!.effectiveCourses)
+    }
+
+    @Test fun choosingSchoolOnlyReplacesConflictedLocalChanges() {
+        store.save("test-account", download(), 1000)
+        val added = manual()
+        store.edit(semester, added)
+        store.edit(semester, listOf(course.copy(notes = "旧备注")), course)
+        val changed = download(listOf(course.copy(date = course.date.plusDays(1), rooms = listOf("新教室"))))
+        val review = store.previewSync("test-account", changed)!!
+        val saved = store.resolveSync("test-account", review, review.conflicts.map { it.id }.toSet(), 2000)
+        assertEquals((changed.courses + added).toSet(), saved.effectiveCourses.toSet())
+    }
+
+    @Test fun staleReviewCannotOverwriteLaterEdits() {
+        store.save("test-account", download(), 1000)
+        store.edit(semester, listOf(course.copy(notes = "备注")), course)
+        val review = store.previewSync("test-account", download(emptyList()))!!
+        store.edit(semester, manual())
+        val before = store.backup("test-account", 1)
+        assertThrows(SchoolFailure::class.java) { store.resolveSync("test-account", review, emptySet(), 2000) }
+        assertEquals(before, store.backup("test-account", 1))
+    }
+
+    @Test fun conflictResolutionRollsBackAllChangesOnOverlap() {
+        store.save("test-account", download(), 1000)
+        store.edit(semester, listOf(course.copy(notes = "备注")), course)
+        val replacement = course.copy(date = course.date.plusDays(1))
+        val other = course.copy(lessonId = "other", name = "另一门课")
+        val review = store.previewSync("test-account", download(listOf(replacement, other)))!!
+        val before = store.backup("test-account", 1)
+        assertThrows(SchoolFailure::class.java) { store.resolveSync("test-account", review, emptySet(), 2000) }
+        assertEquals(before, store.backup("test-account", 1))
+        assertEquals(2, store.resolveSync("test-account", review, review.conflicts.map { it.id }.toSet(), 2000).effectiveCourses.size)
+    }
+
+    @Test fun keepingDeletedOccurrenceSuppressesSchoolReplacement() {
+        store.save("test-account", download(), 1000)
+        store.edit(semester, emptyList(), course, delete = true)
+        val changed = download(listOf(course.copy(date = course.date.plusDays(1))))
+        val review = store.previewSync("test-account", changed)!!
+        assertTrue(review.conflicts.single().local.single().deleted)
+        assertTrue(store.resolveSync("test-account", review, emptySet(), 2000).effectiveCourses.isEmpty())
+        assertTrue(store.save("test-account", changed, 3000).effectiveCourses.isEmpty())
+    }
+
+    @Test fun freshInstallAndUnchangedSyncNeedNoReview() {
+        assertNull(store.previewSync("test-account", download()))
+        store.save("test-account", download(), 1000)
+        store.edit(semester, listOf(course.copy(notes = "备注")), course)
+        assertNull(store.previewSync("test-account", download()))
     }
 
     @Test fun deletedSchoolOccurrenceStaysDeletedOnSync() {
